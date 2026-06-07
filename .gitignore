@@ -36,6 +36,7 @@ web/
 /coverage/
 build/
 
+
 # Symbolication related
 app.*.symbols
 
