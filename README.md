@@ -59,7 +59,7 @@ lib/
 ```
 
 ## Connection
-
+!! You need to run my firmware here: https://github.com/VLDG2712/Hexair
 The app connects to `ws://<ip>:9092` first (live push data), falls back to `http://<ip>:9091/air` polling if WebSocket unavailable. Auto-reconnects on disconnect.
 
 ## Build APK
