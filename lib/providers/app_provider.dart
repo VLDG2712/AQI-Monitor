@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/sensor_data.dart';
 import '../services/device_service.dart';
 import '../services/database_service.dart';
+import '../services/notification_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final DeviceService device = DeviceService();
@@ -128,8 +129,13 @@ class AppProvider extends ChangeNotifier {
       final value = _extractValue(p, rule.sensor, rule.field);
       if (value == null) continue;
       if (_checkThreshold(value, rule.operator, rule.threshold)) {
-        // TODO: fire notification via flutter_local_notifications
-        debugPrint('[Alert] ${rule.label}: $value ${rule.operator} ${rule.threshold}');
+        NotificationService.instance.fireAlert(
+          ruleId:    rule.id,
+          label:     rule.label,
+          value:     value,
+          operator:  rule.operator,
+          threshold: rule.threshold,
+        );
       }
     }
   }

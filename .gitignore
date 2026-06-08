@@ -35,7 +35,7 @@ web/
 /build/
 /coverage/
 build/
-
+TODO.md
 
 # Symbolication related
 app.*.symbols

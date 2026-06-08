@@ -11,6 +11,7 @@ import 'screens/alerts_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/neopixel_screen.dart';
 import 'services/widget_service.dart';
+import 'services/notification_service.dart';
 import 'utils/theme.dart';
 
 @pragma('vm:entry-point')
@@ -28,6 +29,7 @@ void callbackDispatcher() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await WidgetService.init();
+  await NotificationService.instance.init();
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
   await Workmanager().registerPeriodicTask(
     'widgetUpdate',
