@@ -13,6 +13,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _ipController;
+  late TextEditingController _tokenController;
   late AppProvider _provider;
 
   @override
@@ -20,16 +21,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _provider = context.read<AppProvider>();
     _ipController = TextEditingController(text: _provider.deviceIp);
+    _tokenController = TextEditingController(text: _provider.apiToken);
   }
 
   @override
   void dispose() {
     _ipController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
   void _applyIp() {
     _provider.deviceIp = _ipController.text.trim();
+    _provider.saveSettings();
+  }
+
+  void _applyToken() {
+    _provider.apiToken = _tokenController.text.trim();
     _provider.saveSettings();
   }
 
@@ -58,6 +66,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: AppColors.text0,
                   ),
                   decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.bg2,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                ),
+              ),
+            ),
+            _Row(
+              label: 'API Token',
+              child: SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _tokenController,
+                  onSubmitted: (_) => _applyToken(),
+                  onEditingComplete: _applyToken,
+                  obscureText: true,
+                  style: const TextStyle(
+                    fontFamily: 'SpaceMono',
+                    fontSize: 11,
+                    color: AppColors.text0,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Bearer token',
+                    hintStyle: const TextStyle(color: AppColors.text2, fontSize: 11),
                     filled: true,
                     fillColor: AppColors.bg2,
                     border: OutlineInputBorder(

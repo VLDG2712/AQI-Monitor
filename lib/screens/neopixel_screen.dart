@@ -76,11 +76,16 @@ class _NeoPixelScreenState extends State<NeoPixelScreen> {
     }
   }
 
+  String get _token => context.read<AppProvider>().apiToken;
+
   Future<void> _send(Map<String, dynamic> patch) async {
     try {
       await http.post(
         Uri.parse('$_baseUrl/neo'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
         body: jsonEncode(patch),
       ).timeout(const Duration(seconds: 3));
     } catch (_) {}

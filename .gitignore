@@ -12,6 +12,8 @@ key.properties
 .history
 .svn/
 .swiftpm/
+*.zip
+*.properties
 migrate_working_dir/
 windows/
 web/

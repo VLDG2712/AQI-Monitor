@@ -16,6 +16,7 @@ class AppProvider extends ChangeNotifier {
   bool   autoConnect     = true;
   String tempUnit        = '°C';
   int    storageInterval = 30000;
+  String apiToken        = 'changeme-generate-a-real-token';
 
   // Live data
   SensorPayload? latestReading;
@@ -72,6 +73,7 @@ class AppProvider extends ChangeNotifier {
     autoConnect     = prefs.getBool('autoConnect')   ?? true;
     tempUnit        = prefs.getString('tempUnit')     ?? '°C';
     storageInterval = prefs.getInt('storageInterval') ?? 30000;
+    apiToken        = prefs.getString('apiToken') ?? 'changeme-generate-a-real-token';
   }
 
   Future<void> saveSettings() async {
@@ -80,6 +82,7 @@ class AppProvider extends ChangeNotifier {
     await prefs.setBool('autoConnect',        autoConnect);
     await prefs.setString('tempUnit',         tempUnit);
     await prefs.setInt('storageInterval',     storageInterval);
+    await prefs.setString('apiToken',           apiToken);
     device.setDevice(deviceIp);
     notifyListeners();
   }
