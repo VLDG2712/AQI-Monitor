@@ -42,7 +42,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   ];
 
   static const _metrics = [
-    _Metric('AQI',         AppColors.accent,   'aqi'),
+    _Metric('AQI',         AppColors.accent,   'aqi', curved: false),
     _Metric('Temperature', AppColors.temp,      'temperature'),
     _Metric('Humidity',    AppColors.humidity,  'humidity'),
     _Metric('PM2.5',       AppColors.pm,        'pm2_5'),
@@ -225,6 +225,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
+/// Above this many points, per-point dots stop being readable.
+const _kMaxDots = 60;
+
 const _kMonths = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -249,7 +252,15 @@ class _Metric {
   final String label;
   final Color color;
   final String key;
-  const _Metric(this.label, this.color, this.key);
+
+  /// Whether to spline-interpolate between points.
+  ///
+  /// False for discrete series like AQI, which only ever takes integer values
+  /// 1–5. Curving a step series invents intermediate values that never existed
+  /// and overshoots well past the real range, which reads as alarming spikes.
+  final bool curved;
+
+  const _Metric(this.label, this.color, this.key, {this.curved = true});
 }
 
 class _ChartCard extends StatelessWidget {
@@ -407,10 +418,16 @@ class _ChartCard extends StatelessWidget {
                       lineBarsData: [
                         LineChartBarData(
                           spots: points,
-                          isCurved: true,
+                          isCurved: metric.curved,
+                          // Even on genuinely continuous series, splines can
+                          // overshoot past the real min/max between close
+                          // points; this clamps them to the data's range.
+                          preventCurveOverShooting: true,
                           color: metric.color,
                           barWidth: 2,
-                          dotData: const FlDotData(show: true),
+                          // Dots help at ~20 points and merge into a solid
+                          // band at 300+, where they only add noise.
+                          dotData: FlDotData(show: points.length <= _kMaxDots),
                           belowBarData: BarAreaData(
                             show: true,
                             color: metric.color.withValues(alpha: 0.1),
