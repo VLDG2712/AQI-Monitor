@@ -17,12 +17,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _range = '6h';
   List<SensorPayload> _readings = [];
   bool _loading = false;
+  String? _error;
 
+  // 30D/1Y are only really meaningful against the server, which collects
+  // around the clock; the local database only has what the app itself saw.
   static const _ranges = [
     ('1H', '1h', Duration(hours: 1)),
     ('6H', '6h', Duration(hours: 6)),
     ('24H', '24h', Duration(hours: 24)),
     ('7D', '7d', Duration(days: 7)),
+    ('30D', '30d', Duration(days: 30)),
+    ('1Y', '1y', Duration(days: 365)),
   ];
 
   static const _metrics = [
@@ -46,9 +51,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final dur = _ranges.firstWhere((r) => r.$2 == _range).$3;
     final now = DateTime.now().millisecondsSinceEpoch;
     final from = DateTime.now().subtract(dur).millisecondsSinceEpoch;
-    final data = await provider.database.getReadings(from, now);
+    final data = await provider.getHistory(from, now);
+    if (!mounted) return;
     setState(() {
       _readings = data;
+      _error = provider.historyError;
       _loading = false;
     });
   }
@@ -98,6 +105,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
               }).toList(),
             ),
           ),
+
+          // Server unreachable — we fell back to the local database, so say so
+          // rather than letting a sparse chart look like clean air.
+          if (_error != null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.bg2,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.aqi3),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.cloud_off, size: 16, color: AppColors.aqi3),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Server unreachable — showing local history only',
+                      style: TextStyle(
+                        fontFamily: 'SpaceMono',
+                        fontSize: 11,
+                        color: AppColors.aqi3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Charts
           Expanded(
@@ -190,14 +227,14 @@ class _ChartCard extends StatelessWidget {
                       gridData: const FlGridData(show: false),
                       titlesData: const FlTitlesData(show: false),
                       borderData: FlBorderData(show: false),
-                      lineTouchData: const LineTouchData(enabled: false),
+                      lineTouchData: const LineTouchData(enabled: true),
                       lineBarsData: [
                         LineChartBarData(
                           spots: points,
                           isCurved: true,
                           color: metric.color,
                           barWidth: 2,
-                          dotData: const FlDotData(show: false),
+                          dotData: const FlDotData(show: true),
                           belowBarData: BarAreaData(
                             show: true,
                             color: metric.color.withOpacity(0.1),

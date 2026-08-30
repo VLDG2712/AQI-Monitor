@@ -30,8 +30,11 @@ android {
         applicationId "dev.promethium.aqi_monitor"
         minSdkVersion flutter.minSdkVersion
         targetSdk 36
-        versionCode 1
-        versionName "0.2.1"
+        // Both come from pubspec.yaml's `version: <name>+<code>`. Hardcoding
+        // versionCode meant it never incremented, and Android refuses any
+        // update whose versionCode isn't strictly higher than the installed one.
+        versionCode flutter.versionCode
+        versionName flutter.versionName
     }
     signingConfigs {
     release {

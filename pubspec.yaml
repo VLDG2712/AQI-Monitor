@@ -1,6 +1,6 @@
 name: aqi_monitor
 description: AQI Monitor — ESP32 air quality companion app
-version: 0.1.2+3
+version: 0.2.2+4
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

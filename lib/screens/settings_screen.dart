@@ -1,7 +1,10 @@
 // lib/screens/settings_screen.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
+import '../services/history_service.dart';
 import '../utils/theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,7 +17,20 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _ipController;
   late TextEditingController _tokenController;
+  late TextEditingController _lanController;
+  late TextEditingController _tsController;
+  late TextEditingController _serverTokenController;
   late AppProvider _provider;
+
+  String? _testResult;
+  bool _testing = false;
+  bool _revealTokens = false;
+
+  /// Whether the controllers have been populated from loaded preferences.
+  bool _synced = false;
+
+  /// Coalesces keystrokes so every character doesn't hit disk.
+  Timer? _saveDebounce;
 
   @override
   void initState() {
@@ -22,24 +38,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _provider = context.read<AppProvider>();
     _ipController = TextEditingController(text: _provider.deviceIp);
     _tokenController = TextEditingController(text: _provider.apiToken);
+    _lanController = TextEditingController(text: _provider.serverLanHost);
+    _tsController = TextEditingController(text: _provider.serverTailscaleHost);
+    _serverTokenController =
+        TextEditingController(text: _provider.serverToken);
+
+    // IndexedStack builds this screen at startup, before the async settings
+    // load has finished, so the controllers above may hold defaults. Re-read
+    // them once the load completes.
+    _syncFromProvider();
+    _provider.addListener(_syncFromProvider);
+  }
+
+  void _syncFromProvider() {
+    if (_synced || !_provider.settingsLoaded) return;
+    _synced = true;
+    // No setState: each controller is a Listenable its TextField already
+    // watches, and this also runs from initState where setState is invalid.
+    _ipController.text = _provider.deviceIp;
+    _tokenController.text = _provider.apiToken;
+    _lanController.text = _provider.serverLanHost;
+    _tsController.text = _provider.serverTailscaleHost;
+    _serverTokenController.text = _provider.serverToken;
   }
 
   @override
   void dispose() {
+    _provider.removeListener(_syncFromProvider);
+    // Flush rather than drop: a pending debounce here means the user typed
+    // within the last moment and would otherwise lose that edit.
+    if (_saveDebounce?.isActive ?? false) {
+      _saveDebounce!.cancel();
+      _applyAll();
+    }
+    _saveDebounce?.cancel();
     _ipController.dispose();
     _tokenController.dispose();
+    _lanController.dispose();
+    _tsController.dispose();
+    _serverTokenController.dispose();
     super.dispose();
   }
 
-  void _applyIp() {
-    _provider.deviceIp = _ipController.text.trim();
+  /// Persist after a short pause in typing, so navigating away without
+  /// pressing "done" still saves.
+  void _saveSoon() {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 600), _applyAll);
+  }
+
+  /// Writes every field from its own controller.
+  ///
+  /// Deliberately all-at-once rather than per-field partial writes: each value
+  /// comes from its own controller, so no field can clobber another.
+  void _applyAll() {
+    if (!_synced) return; // never write defaults over stored values
+    _provider
+      ..deviceIp = _ipController.text.trim()
+      ..apiToken = _tokenController.text.trim()
+      ..serverLanHost = _lanController.text.trim()
+      ..serverTailscaleHost = _tsController.text.trim()
+      ..serverToken = _serverTokenController.text.trim();
     _provider.saveSettings();
   }
 
-  void _applyToken() {
-    _provider.apiToken = _tokenController.text.trim();
-    _provider.saveSettings();
+  void _applyServer() => _applyAll();
+
+  Future<void> _testServer() async {
+    _applyServer();
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+    String result;
+    try {
+      final s = await _provider.remoteHistory.stats();
+      final rows = s['rows'] ?? 0;
+      final host = _provider.remoteHistory.activeHost ?? '?';
+      result = 'OK — $rows rows via $host';
+    } catch (e) {
+      result = e is HistoryUnavailable ? e.message : '$e';
+    }
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _testResult = result;
+    });
   }
+
+  void _applyIp() => _applyAll();
+
+  void _applyToken() => _applyAll();
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   controller: _ipController,
                   onSubmitted: (_) => _applyIp(),
                   onEditingComplete: _applyIp,
+                  onChanged: (_) => _saveSoon(),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.right,
                   style: const TextStyle(
@@ -85,7 +175,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   controller: _tokenController,
                   onSubmitted: (_) => _applyToken(),
                   onEditingComplete: _applyToken,
-                  obscureText: true,
+                  onChanged: (_) => _saveSoon(),
+                  obscureText: !_revealTokens,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   style: const TextStyle(
                     fontFamily: 'SpaceMono',
                     fontSize: 11,
@@ -145,13 +238,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ]),
+
+          _Section(label: 'History Server', children: [
+            _Row(
+              label: 'Source',
+              child: _ToggleGroup(
+                options: const ['Local', 'Server'],
+                selected: provider.historySource == HistorySource.server
+                    ? 'Server'
+                    : 'Local',
+                onSelect: (v) {
+                  provider.historySource =
+                      v == 'Server' ? HistorySource.server : HistorySource.local;
+                  provider.saveSettings();
+                },
+              ),
+            ),
+            _Row(
+              label: 'LAN Address',
+              child: _ServerField(
+                controller: _lanController,
+                hint: '192.168.2.54:9101',
+                onDone: _applyServer,
+                onChanged: _saveSoon,
+              ),
+            ),
+            _Row(
+              label: 'Tailscale Address',
+              child: _ServerField(
+                controller: _tsController,
+                hint: '100.90.171.26:9101',
+                onDone: _applyServer,
+                onChanged: _saveSoon,
+              ),
+            ),
+            _Row(
+              label: 'Server Token',
+              child: _ServerField(
+                controller: _serverTokenController,
+                hint: 'Bearer token',
+                obscure: !_revealTokens,
+                onDone: _applyServer,
+                onChanged: _saveSoon,
+              ),
+            ),
+            _Row(
+              label: 'Show Tokens',
+              child: Switch(
+                value: _revealTokens,
+                onChanged: (v) => setState(() => _revealTokens = v),
+                activeColor: AppColors.accent,
+              ),
+            ),
+            InkWell(
+              onTap: _testing ? null : _testServer,
+              child: _Row(
+                label: 'Test Connection',
+                child: _testing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.accent,
+                        ),
+                      )
+                    : const Icon(Icons.wifi_find,
+                        color: AppColors.text2, size: 20),
+              ),
+            ),
+            if (_testResult != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                child: Text(
+                  _testResult!,
+                  style: TextStyle(
+                    fontFamily: 'SpaceMono',
+                    fontSize: 11,
+                    color: _testResult!.startsWith('OK')
+                        ? AppColors.connected
+                        : AppColors.error,
+                  ),
+                ),
+              ),
+          ]),
+
   _Section(label: 'App', children: [
             InkWell(
               onTap: () {
                 showAboutDialog(
                   context: context,
                   applicationName: 'AQI Monitor',
-                  applicationVersion: 'v0.2.1',
+                  applicationVersion: 'v0.2.2',
                   applicationLegalese: '© 2026 Promethium',
                   children: const [
                     SizedBox(height: 20),
@@ -175,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 40),
           const Center(
             child: Text(
-              'AQI Monitor  •  v0.2.1',
+              'AQI Monitor  •  v0.2.2',
               style: TextStyle(
                 fontFamily: 'SpaceMono',
                 fontSize: 11,
@@ -300,6 +478,57 @@ class _ToggleGroup extends StatelessWidget {
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+/// Right-aligned text field used by the History Server section.
+class _ServerField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+  final VoidCallback onDone;
+  final VoidCallback? onChanged;
+
+  const _ServerField({
+    required this.controller,
+    required this.hint,
+    required this.onDone,
+    this.obscure = false,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 170,
+      child: TextField(
+        controller: controller,
+        onSubmitted: (_) => onDone(),
+        onEditingComplete: onDone,
+        onChanged: onChanged == null ? null : (_) => onChanged!(),
+        obscureText: obscure,
+        autocorrect: false,
+        enableSuggestions: false,
+        textAlign: TextAlign.right,
+        style: const TextStyle(
+          fontFamily: 'SpaceMono',
+          fontSize: 11,
+          color: AppColors.text0,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: AppColors.text2, fontSize: 11),
+          filled: true,
+          fillColor: AppColors.bg2,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        ),
+      ),
     );
   }
 }

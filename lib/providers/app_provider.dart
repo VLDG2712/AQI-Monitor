@@ -5,11 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/sensor_data.dart';
 import '../services/device_service.dart';
 import '../services/database_service.dart';
+import '../services/history_service.dart';
 import '../services/notification_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final DeviceService device = DeviceService();
   final DatabaseService database = DatabaseService();
+  final RemoteHistoryService remoteHistory = RemoteHistoryService();
 
   // Settings
   String deviceIp        = '192.168.2.116';
@@ -17,6 +19,24 @@ class AppProvider extends ChangeNotifier {
   String tempUnit        = '°C';
   int    storageInterval = 30000;
   String apiToken        = 'changeme-generate-a-real-token';
+
+  // History server (Pi). LAN is tried first, Tailscale is the fallback.
+  HistorySource historySource   = HistorySource.local;
+  String serverLanHost          = '';
+  String serverTailscaleHost    = '';
+  String serverToken            = '';
+
+  /// Set when the last server-backed history read failed, so the History
+  /// screen can explain itself instead of just showing an empty chart.
+  String? historyError;
+
+  /// False until SharedPreferences has been read.
+  ///
+  /// Screens are built by an IndexedStack at startup, which means Settings'
+  /// initState runs *before* the async load finishes. Without this flag its
+  /// controllers would latch onto the defaults and then write those defaults
+  /// back over the saved values on the next edit.
+  bool settingsLoaded = false;
 
   // Live data
   SensorPayload? latestReading;
@@ -74,6 +94,23 @@ class AppProvider extends ChangeNotifier {
     tempUnit        = prefs.getString('tempUnit')     ?? '°C';
     storageInterval = prefs.getInt('storageInterval') ?? 30000;
     apiToken        = prefs.getString('apiToken') ?? 'changeme-generate-a-real-token';
+
+    serverLanHost       = prefs.getString('serverLanHost')       ?? '';
+    serverTailscaleHost = prefs.getString('serverTailscaleHost') ?? '';
+    serverToken         = prefs.getString('serverToken')         ?? '';
+    historySource = (prefs.getString('historySource') == 'server')
+        ? HistorySource.server
+        : HistorySource.local;
+    _syncRemoteHistory();
+    settingsLoaded = true;
+    notifyListeners();
+  }
+
+  void _syncRemoteHistory() {
+    remoteHistory
+      ..lanHost = serverLanHost
+      ..tailscaleHost = serverTailscaleHost
+      ..token = serverToken;
   }
 
   Future<void> saveSettings() async {
@@ -83,8 +120,36 @@ class AppProvider extends ChangeNotifier {
     await prefs.setString('tempUnit',         tempUnit);
     await prefs.setInt('storageInterval',     storageInterval);
     await prefs.setString('apiToken',           apiToken);
+    await prefs.setString('serverLanHost',       serverLanHost);
+    await prefs.setString('serverTailscaleHost', serverTailscaleHost);
+    await prefs.setString('serverToken',         serverToken);
+    await prefs.setString('historySource',
+        historySource == HistorySource.server ? 'server' : 'local');
+    _syncRemoteHistory();
     device.setDevice(deviceIp);
     notifyListeners();
+  }
+
+  /// History for the given window, from whichever source is selected.
+  ///
+  /// A server read that fails falls back to the local database rather than
+  /// showing nothing — the local copy is thinner but better than a blank chart
+  /// when the Pi is unreachable.
+  Future<List<SensorPayload>> getHistory(int fromMs, int toMs) async {
+    if (historySource == HistorySource.server && remoteHistory.isConfigured) {
+      try {
+        final data = await remoteHistory.getReadings(fromMs, toMs);
+        historyError = null;
+        return data;
+      } catch (e) {
+        historyError = e is HistoryUnavailable ? e.message : '$e';
+        debugPrint('[AppProvider] server history failed, using local: $e');
+        final local = await database.getReadings(fromMs, toMs);
+        return local;
+      }
+    }
+    historyError = null;
+    return database.getReadings(fromMs, toMs);
   }
 
   Future<void> _loadJournal() async {
