@@ -19,6 +19,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   bool _loading = false;
   String? _error;
 
+  /// Index into [_readings] currently being scrubbed, shared by every chart so
+  /// they all read out the same moment. Null when not touching.
+  int? _touchedIndex;
+
+  void _setTouched(int? i) {
+    // touchCallback fires on every pointer move; skip redundant rebuilds.
+    if (i == _touchedIndex) return;
+    if (i != null && (i < 0 || i >= _readings.length)) return;
+    setState(() => _touchedIndex = i);
+  }
+
   // 30D/1Y are only really meaningful against the server, which collects
   // around the clock; the local database only has what the app itself saw.
   static const _ranges = [
@@ -57,6 +68,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       _readings = data;
       _error = provider.historyError;
       _loading = false;
+      // The old index points into a list that no longer exists.
+      _touchedIndex = null;
     });
   }
 
@@ -83,7 +96,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
                         color: selected
-                            ? AppColors.accent.withOpacity(0.15)
+                            ? AppColors.accent.withValues(alpha: 0.15)
                             : AppColors.bg1,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
@@ -105,6 +118,61 @@ class _HistoryScreenState extends State<HistoryScreen> {
               }).toList(),
             ),
           ),
+
+          // Timestamp readout. Shows the scrubbed point while dragging, and
+          // the most recent reading otherwise, so the strip never collapses
+          // and shifts the charts around.
+          if (_readings.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _touchedIndex != null ? AppColors.bg2 : AppColors.bg1,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _touchedIndex != null
+                      ? AppColors.accent
+                      : AppColors.bg3,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _touchedIndex != null
+                        ? Icons.my_location
+                        : Icons.schedule,
+                    size: 14,
+                    color: _touchedIndex != null
+                        ? AppColors.accent
+                        : AppColors.text2,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _touchedIndex != null ? 'At point' : 'Latest',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.text2,
+                      fontFamily: 'SpaceMono',
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    formatTimestamp(
+                      _readings[_touchedIndex ?? _readings.length - 1]
+                          .timestamp,
+                    ),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'SpaceMono',
+                      color: _touchedIndex != null
+                          ? AppColors.accent
+                          : AppColors.text1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Server unreachable — we fell back to the local database, so say so
           // rather than letting a sparse chart look like clean air.
@@ -146,6 +214,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     itemBuilder: (ctx, i) => _ChartCard(
                       metric: _metrics[i],
                       readings: _readings,
+                      touchedIndex: _touchedIndex,
+                      onTouch: _setTouched,
                     ),
                   ),
           ),
@@ -153,6 +223,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
   }
+}
+
+const _kMonths = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+/// Formats an epoch-ms timestamp for the scrub readout.
+///
+/// Seconds are included because server buckets can be as fine as 30s, so
+/// minute resolution would render adjacent points identically. The year is
+/// shown only when it isn't the current one, which keeps the common case short
+/// without ever being ambiguous on the 1Y range.
+String formatTimestamp(int ms) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  final year = d.year == DateTime.now().year ? '' : ' ${d.year}';
+  return '${d.day} ${_kMonths[d.month - 1]}$year  '
+      '${_two(d.hour)}:${_two(d.minute)}:${_two(d.second)}';
 }
 
 class _Metric {
@@ -165,8 +255,15 @@ class _Metric {
 class _ChartCard extends StatelessWidget {
   final _Metric metric;
   final List<SensorPayload> readings;
+  final int? touchedIndex;
+  final ValueChanged<int?> onTouch;
 
-  const _ChartCard({required this.metric, required this.readings});
+  const _ChartCard({
+    required this.metric,
+    required this.readings,
+    required this.onTouch,
+    this.touchedIndex,
+  });
 
   double _getValue(SensorPayload p) {
     switch (metric.key) {
@@ -185,7 +282,14 @@ class _ChartCard extends StatelessWidget {
     final points = readings.asMap().entries.map((e) =>
         FlSpot(e.key.toDouble(), _getValue(e.value))).toList();
 
-    final latest = points.isNotEmpty ? points.last.y : null;
+    // While scrubbing, every card reports the touched moment rather than the
+    // most recent one — that's what makes the six charts read as one instrument.
+    final scrubbing = touchedIndex != null &&
+        touchedIndex! >= 0 &&
+        touchedIndex! < points.length;
+    final latest = points.isEmpty
+        ? null
+        : (scrubbing ? points[touchedIndex!].y : points.last.y);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -208,6 +312,8 @@ class _ChartCard extends StatelessWidget {
                     style: TextStyle(
                       fontFamily: 'SpaceMono',
                       fontSize: 14,
+                      fontWeight:
+                          scrubbing ? FontWeight.bold : FontWeight.normal,
                       color: metric.color,
                     )),
             ],
@@ -227,7 +333,77 @@ class _ChartCard extends StatelessWidget {
                       gridData: const FlGridData(show: false),
                       titlesData: const FlTitlesData(show: false),
                       borderData: FlBorderData(show: false),
-                      lineTouchData: const LineTouchData(enabled: true),
+                      lineTouchData: LineTouchData(
+                        enabled: true,
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (_) => AppColors.bg3,
+                          tooltipRoundedRadius: 6,
+                          tooltipPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          // Cards are short and narrow; without these the
+                          // tooltip gets clipped at the edges.
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          getTooltipItems: (spots) => spots.map((s) {
+                            final ts = s.spotIndex >= 0 &&
+                                    s.spotIndex < readings.length
+                                ? readings[s.spotIndex].timestamp
+                                : null;
+                            return LineTooltipItem(
+                              s.y.toStringAsFixed(1),
+                              TextStyle(
+                                color: metric.color,
+                                fontFamily: 'SpaceMono',
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              children: [
+                                if (ts != null)
+                                  TextSpan(
+                                    text: '\n${formatTimestamp(ts)}',
+                                    style: const TextStyle(
+                                      color: AppColors.text1,
+                                      fontFamily: 'SpaceMono',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.normal,
+                                    ),
+                                  ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                        getTouchedSpotIndicator: (bar, indexes) =>
+                            indexes.map((_) {
+                          return TouchedSpotIndicatorData(
+                            FlLine(
+                                color: metric.color.withValues(alpha: 0.6),
+                                strokeWidth: 1),
+                            FlDotData(
+                              show: true,
+                              getDotPainter: (s, p, b, i) =>
+                                  FlDotCirclePainter(
+                                radius: 4,
+                                color: metric.color,
+                                strokeWidth: 2,
+                                strokeColor: AppColors.bg0,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        touchCallback: (event, response) {
+                          final spots = response?.lineBarSpots;
+                          // isInterestedForInteractions goes false on pointer
+                          // up/exit, which is how the readout clears instead
+                          // of sticking at the last touched point.
+                          if (!event.isInterestedForInteractions ||
+                              spots == null ||
+                              spots.isEmpty) {
+                            onTouch(null);
+                            return;
+                          }
+                          onTouch(spots.first.spotIndex);
+                        },
+                      ),
                       lineBarsData: [
                         LineChartBarData(
                           spots: points,
@@ -237,7 +413,7 @@ class _ChartCard extends StatelessWidget {
                           dotData: const FlDotData(show: true),
                           belowBarData: BarAreaData(
                             show: true,
-                            color: metric.color.withOpacity(0.1),
+                            color: metric.color.withValues(alpha: 0.1),
                           ),
                         ),
                       ],
