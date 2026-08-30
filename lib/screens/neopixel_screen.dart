@@ -101,7 +101,7 @@ class _NeoPixelScreenState extends State<NeoPixelScreen> {
         actions: [
           Switch(
             value: _enabled,
-            activeColor: AppColors.accent,
+            activeThumbColor: AppColors.accent,
             onChanged: (v) {
               setState(() => _enabled = v);
               _send({'enabled': v});
@@ -277,7 +277,7 @@ class _NeoPixelScreenState extends State<NeoPixelScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
                           color: _effect == e.$1
-                              ? AppColors.accent.withOpacity(0.15)
+                              ? AppColors.accent.withValues(alpha: 0.15)
                               : AppColors.bg2,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
@@ -378,7 +378,7 @@ class _ModeBtn extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: active ? AppColors.accent.withOpacity(0.15) : AppColors.bg2,
+            color: active ? AppColors.accent.withValues(alpha: 0.15) : AppColors.bg2,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: active ? AppColors.accent : AppColors.bg3),
           ),
@@ -433,7 +433,12 @@ class _ColorDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => onTap(color.red, color.green, color.blue),
+      // Color.r/g/b are 0..1 doubles now; .red/.green/.blue are deprecated.
+      onTap: () => onTap(
+        (color.r * 255.0).round().clamp(0, 255),
+        (color.g * 255.0).round().clamp(0, 255),
+        (color.b * 255.0).round().clamp(0, 255),
+      ),
       child: Container(
         width: 32, height: 32,
         decoration: BoxDecoration(

@@ -89,7 +89,7 @@ class _JournalScreenState extends State<JournalScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: selected
-                              ? AppColors.accent.withOpacity(0.15)
+                              ? AppColors.accent.withValues(alpha: 0.15)
                               : AppColors.bg2,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(

@@ -112,7 +112,7 @@ class _RuleCard extends StatelessWidget {
               Switch(
                 value: rule.enabled,
                 onChanged: (_) => onToggle(),
-                activeColor: AppColors.accent,
+                activeThumbColor: AppColors.accent,
               ),
             ],
           ),

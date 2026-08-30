@@ -206,7 +206,7 @@ class _AqiCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.bg1,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: aqiC.withOpacity(isNoData ? 0.1 : 0.3)),
+        border: Border.all(color: aqiC.withValues(alpha: isNoData ? 0.1 : 0.3)),
       ),
       child: Column(
         children: [
@@ -250,7 +250,7 @@ class _AqiCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
-                color: aqiC.withOpacity(0.15),
+                color: aqiC.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(

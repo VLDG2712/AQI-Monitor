@@ -206,7 +206,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   provider.autoConnect = v;
                   provider.saveSettings();
                 },
-                activeColor: AppColors.accent,
+                activeThumbColor: AppColors.accent,
               ),
             ),
           ]),
@@ -287,7 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Switch(
                 value: _revealTokens,
                 onChanged: (v) => setState(() => _revealTokens = v),
-                activeColor: AppColors.accent,
+                activeThumbColor: AppColors.accent,
               ),
             ),
             InkWell(
@@ -329,7 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 showAboutDialog(
                   context: context,
                   applicationName: 'AQI Monitor',
-                  applicationVersion: 'v0.2.2',
+                  applicationVersion: 'v0.2.3',
                   applicationLegalese: '© 2026 Promethium',
                   children: const [
                     SizedBox(height: 20),
@@ -353,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 40),
           const Center(
             child: Text(
-              'AQI Monitor  •  v0.2.2',
+              'AQI Monitor  •  v0.2.3',
               style: TextStyle(
                 fontFamily: 'SpaceMono',
                 fontSize: 11,
@@ -460,7 +460,7 @@ class _ToggleGroup extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: isSelected
-                  ? AppColors.accent.withOpacity(0.15)
+                  ? AppColors.accent.withValues(alpha: 0.15)
                   : AppColors.bg2,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
