@@ -34,7 +34,10 @@ void main() async {
   await Workmanager().registerPeriodicTask(
     'widgetUpdate',
     'updateWidget',
-    frequency: const Duration(minutes: 1),
+    // Android clamps periodic work to a 15-minute minimum, so asking for 1
+    // minute did not produce minute-by-minute updates — it was silently
+    // rounded up. Stating 15 makes the real behaviour visible.
+    frequency: const Duration(minutes: 15),
     constraints: Constraints(networkType: NetworkType.connected),
   );
   runApp(
