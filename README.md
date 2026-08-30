@@ -67,11 +67,16 @@ bump the `+N` for every release you intend to install over an older build.
 
 Two independent connections, configured separately in **Settings**:
 
-**The device** (Device section) — the ESP32's IP. The app tries
-`ws://<ip>:9092` first and falls back to polling `http://<ip>:9091/air`. The
-firmware currently has no WebSocket server, so the fallback is the normal path
-and the first attempt just costs a timeout. The API token here is only needed
-for NeoPixel control; `/air` is unauthenticated.
+**The device** (Device section) — the ESP32's IP. The app polls
+`http://<ip>:9091/air`. The API token here is only needed for NeoPixel control;
+`/air` is unauthenticated.
+
+WebSocket support exists in `device_service.dart` but is off behind
+`_wsEnabled`, because the firmware serves nothing on 9092. Probing it cost a
+timeout on every connect and raised an unhandled `SocketException`, since
+`web_socket_channel` performs its upgrade over `HttpClient` and that refusal
+escapes both the `try/catch` and the stream's `onError`. Flip the flag if a
+WebSocket server is ever added.
 
 **The history server** (History Server section) — the optional service from the
 Hexair repo's `server/` directory. Set a LAN address, optionally a Tailscale
@@ -93,11 +98,16 @@ matters. Whichever answered is preferred for the next few minutes.
 | NeoPixel | Ring control: mode, effect, colour, brightness, scenes |
 | Settings | Device, display, storage, history server |
 
-**History** ranges run from 1H to 1Y. Dragging any chart moves all six to the
-same moment, with the date and time shown above; the server buckets
-server-side, so a year returns a few hundred points rather than a million. 30D
-and 1Y are only meaningful against the server, since the local database holds
-only what the app saw while running.
+**History** charts AQI, temperature, humidity, PM2.5, eCO2, TVOC and pressure
+over ranges from 1H to 1Y. Dragging any chart moves all seven to the same
+moment, with the date and time shown above; the server aggregates server-side,
+so a year returns a few hundred points rather than a million. 30D and 1Y are
+only meaningful against the server, since the local database holds only what
+the app saw while running.
+
+Note that TVOC and eCO2 track each other closely. That is the sensor, not a
+bug: the ENS160 derives both from one MOX element, so eCO2 is a model output
+from the VOC response rather than an independent CO2 measurement.
 
 ## Architecture
 
@@ -109,7 +119,7 @@ lib/
 ├── providers/
 │   └── app_provider.dart         # Global state (ChangeNotifier), settings
 ├── services/
-│   ├── device_service.dart       # WebSocket + HTTP polling to the ESP32
+│   ├── device_service.dart       # HTTP polling to the ESP32 (WS behind a flag)
 │   ├── database_service.dart     # sqflite: readings, journal, alerts
 │   ├── history_service.dart      # Remote history API, LAN → Tailscale fallback
 │   ├── notification_service.dart # Local push for alert rules
