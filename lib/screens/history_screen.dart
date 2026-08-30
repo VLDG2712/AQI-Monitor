@@ -47,6 +47,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _Metric('Humidity',    AppColors.humidity,  'humidity'),
     _Metric('PM2.5',       AppColors.pm,        'pm2_5'),
     _Metric('eCO₂',        AppColors.co2,       'eco2'),
+    _Metric('TVOC',        AppColors.tvoc,      'tvoc'),
     _Metric('Pressure',    AppColors.pressure,  'pressure'),
   ];
 
@@ -283,6 +284,7 @@ class _ChartCard extends StatelessWidget {
       case 'humidity':    return p.aht21.humidity;
       case 'pm2_5':       return p.pms5003.pm2_5.toDouble();
       case 'eco2':        return p.ens160.eco2.toDouble();
+      case 'tvoc':        return p.ens160.tvoc.toDouble();
       case 'pressure':    return p.bmp580.pressure;
       default:            return 0;
     }

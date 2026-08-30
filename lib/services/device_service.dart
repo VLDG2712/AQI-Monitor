@@ -13,12 +13,25 @@ class DeviceService {
   static const _wsPort   = 9092;
   static const _httpPort = 9091;
 
+  /// Whether to try a WebSocket before falling back to HTTP polling.
+  ///
+  /// Off by default: the firmware serves no WebSocket on 9092. Attempting it
+  /// cost a timeout on every connect and, worse, raised an unhandled
+  /// SocketException — web_socket_channel does its upgrade over HttpClient,
+  /// and that refusal escapes both the try/catch here and the stream's
+  /// onError. Flip this back on if a WebSocket server is ever added.
+  static const _wsEnabled = false;
+
+  /// How long to wait for a first WebSocket message before falling back.
+  /// Only relevant when [_wsEnabled] is true.
+  static const _wsProbeTimeout = Duration(milliseconds: 1500);
+
   String _ip = '192.168.2.116';
   ConnectionStatus _status = ConnectionStatus.disconnected;
   WebSocketChannel? _ws;
   Timer? _pollTimer;
   Timer? _reconnectTimer;
-  bool _useWebSocket = true;
+  bool _useWebSocket = _wsEnabled;
 
   final _dataController   = StreamController<SensorPayload>.broadcast();
   final _statusController = StreamController<ConnectionStatus>.broadcast();
@@ -30,6 +43,9 @@ class DeviceService {
   String get ip => _ip;
 
   void setDevice(String ip) {
+    // A different device may well support WebSockets even if the last one did
+    // not, so re-arm the probe — but only on an actual change.
+    if (ip != _ip) _useWebSocket = _wsEnabled;
     _ip = ip;
   }
 
@@ -49,8 +65,8 @@ class DeviceService {
       final uri = Uri.parse('ws://$_ip:$_wsPort/');
       _ws = WebSocketChannel.connect(uri);
 
-      // Timeout if no message in 5 seconds
-      final timeout = Timer(const Duration(seconds: 5), () {
+      // Fall back if no message arrives promptly.
+      final timeout = Timer(_wsProbeTimeout, () {
         if (_status == ConnectionStatus.connecting) {
           debugPrint('[DeviceService] WS timeout — falling back to polling');
           _useWebSocket = false;
@@ -124,7 +140,10 @@ class DeviceService {
     _ws?.sink.close();
     _ws = null;
     _pollTimer = null;
-    _useWebSocket = true;
+    // _useWebSocket is deliberately NOT reset here. connect() calls
+    // disconnect() first, so resetting it threw away the discovery that this
+    // device has no WebSocket and re-paid the probe timeout on every single
+    // reconnect. setDevice() re-arms it when the address actually changes.
     _setStatus(ConnectionStatus.disconnected);
   }
 

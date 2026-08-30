@@ -329,7 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 showAboutDialog(
                   context: context,
                   applicationName: 'AQI Monitor',
-                  applicationVersion: 'v0.2.3',
+                  applicationVersion: 'v0.2.4',
                   applicationLegalese: '© 2026 Promethium',
                   children: const [
                     SizedBox(height: 20),
@@ -353,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 40),
           const Center(
             child: Text(
-              'AQI Monitor  •  v0.2.3',
+              'AQI Monitor  •  v0.2.4',
               style: TextStyle(
                 fontFamily: 'SpaceMono',
                 fontSize: 11,

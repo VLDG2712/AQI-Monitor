@@ -22,6 +22,7 @@ class AppColors {
   static const pm       = Color(0xFFCE93D8);
   static const pressure = Color(0xFF80CBC4);
   static const co2      = Color(0xFFFFF176);
+  static const tvoc     = Color(0xFFFF6EC7);
 
   static const connected    = Color(0xFF00E676);
   static const disconnected = Color(0xFF627082);
